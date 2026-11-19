@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Viewer</title>
+  <!-- Marked.js for MD parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for code syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --sidebar-width: 300px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Styling */
+    #sidebar {
+      width: var(--sidebar-width);
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-header h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 8px 10px;
+      background-color: #21262d;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background-color 0.2s, border-color 0.2s;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background-color: #30363d;
+      border-color: var(--text-muted);
+    }
+
+    .btn-danger {
+      color: #f85149;
+    }
+    .btn-danger:hover {
+      background-color: rgba(248, 81, 73, 0.15);
+      border-color: #f85149;
+    }
+
+    #file-list {
+      list-style: none;
+      overflow-y: auto;
+      flex-grow: 1;
+      padding: 10px 0;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      border-left: 3px solid transparent;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .file-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-grow: 1;
+      margin-right: 8px;
+    }
+
+    .file-item:hover {
+      background-color: rgba(177, 186, 196, 0.08);
+      color: var(--text-main);
+    }
+
+    .file-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background-color: rgba(56, 139, 253, 0.1);
+      font-weight: 500;
+    }
+
+    /* Sidebar Action Button */
+    .btn-item-action {
+      opacity: 0;
+      background-color: #21262d;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .file-item.active .btn-item-action,
+    .file-item.editing .btn-item-action {
+      opacity: 1;
+    }
+
+    .btn-item-action:hover {
+      background-color: #30363d;
+      border-color: var(--text-muted);
+    }
+
+    .btn-item-action.save-mode {
+      background-color: #238636;
+      border-color: #2ea043;
+      color: #ffffff;
+    }
+
+    .btn-item-action.save-mode:hover {
+      background-color: #2ea043;
+    }
+
+    /* Main Area Container */
+    #main {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 40px;
+      display: flex;
+      justify-content: center;
+    }
+
+    #editor-wrapper {
+      width: 100%;
+      max-width: 880px;
+      min-height: 100%;
+    }
+
+    #content {
+      line-height: 1.6;
+      width: 100%;
+    }
+
+    #editor-textarea {
+      display: none;
+      width: 100%;
+      min-height: 70vh;
+      background-color: var(--bg-secondary);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+    }
+
+    #editor-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    /* Markdown Render Styles */
+    #content h1, #content h2, #content h3, #content h4 {
+      color: #f0f6fc;
+      margin-top: 1.5em;
+      margin-bottom: 0.6em;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.3em;
+    }
+
+    #content p { margin-bottom: 1em; }
+
+    #content a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    #content a:hover { text-decoration: underline; }
+
+    #content code {
+      background-color: rgba(110, 118, 129, 0.2);
+      padding: 0.2em 0.4em;
+      border-radius: 6px;
+      font-size: 85%;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+    }
+
+    #content pre {
+      background-color: #161b22;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin-bottom: 1em;
+      border: 1px solid var(--border-color);
+    }
+
+    #content pre code {
+      background-color: transparent;
+      padding: 0;
+    }
+
+    #content blockquote {
+      padding: 0 1em;
+      color: var(--text-muted);
+      border-left: 0.25em solid var(--border-color);
+      margin-bottom: 1em;
+    }
+
+    #content ul, #content ol {
+      padding-left: 2em;
+      margin-bottom: 1em;
+    }
+
+    #content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1em;
+    }
+
+    #content table th, #content table td {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    #content table th {
+      background-color: var(--bg-secondary);
+    }
+
+    .placeholder {
+      text-align: center;
+      margin-top: 20%;
+      color: var(--text-muted);
+    }
+
+    #folder-input { display: none; }
+
+    /* Theme Panel Styles */
+    #theme-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #21262d;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+    }
+
+    .theme-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-main);
+    }
+
+    .theme-row input[type="color"] {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+      height: 24px;
+      width: 45px;
+      padding: 0;
+    }
+
+    .theme-row input[type="number"] {
+      width: 55px;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+
+    .theme-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h2>Markdown Viewer</h2>
+      <div class="btn-group">
+        <button class="btn" id="btn-pick">📁 Open Folder</button>
+        <button class="btn btn-danger" id="btn-clear" title="Clear cached files">Clear Storage</button>
+      </div>
+      <div class="btn-group" style="margin-top: 8px;">
+        <button class="btn" id="btn-theme-toggle">🎨 Theme Settings</button>
+      </div>
+      <div id="theme-panel">
+        <div class="theme-row"><span>Bg Primary</span> <input type="color" id="input-bg-primary"></div>
+        <div class="theme-row"><span>Bg Secondary</span> <input type="color" id="input-bg-secondary"></div>
+        <div class="theme-row"><span>Border Color</span> <input type="color" id="input-border-color"></div>
+        <div class="theme-row"><span>Text Main</span> <input type="color" id="input-text-main"></div>
+        <div class="theme-row"><span>Text Muted</span> <input type="color" id="input-text-muted"></div>
+        <div class="theme-row"><span>Accent Color</span> <input type="color" id="input-accent"></div>
+        <div class="theme-row"><span>Sidebar (px)</span> <input type="number" id="input-sidebar-width" min="150" max="800"></div>
+        <button class="btn" id="btn-theme-reset" style="margin-top: 8px;">Reset to Defaults</button>
+      </div>
+      <input type="file" id="folder-input" webkitdirectory directory multiple>
+    </div>
+    <ul id="file-list">
+      <li class="file-item" style="pointer-events: none;">Initializing storage...</li>
+    </ul>
+  </aside>
+
+  <main id="main">
+    <div id="editor-wrapper">
+      <article id="content">
+        <div class="placeholder">Select a Markdown file from the sidebar to view.</div>
+      </article>
+      <textarea id="editor-textarea" placeholder="Type Markdown here..."></textarea>
+    </div>
+  </main>
+
+  <script>
+    // --- IndexedDB Persistence Manager ---
+    const DB_NAME = 'MDViewerDB';
+    const STORE_NAME = 'markdown_files';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function saveFileToDB(name, content) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.put({ name, content, updatedAt: Date.now() });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function getAllFilesFromDB() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function clearDB() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    // --- Markdown & UI Core ---
+    marked.setOptions({
+      highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+      },
+      breaks: true
+    });
+
+    const fileListEl = document.getElementById('file-list');
+    const contentEl = document.getElementById('content');
+    const textareaEl = document.getElementById('editor-textarea');
+    const folderInput = document.getElementById('folder-input');
+    const btnPick = document.getElementById('btn-pick');
+    const btnClear = document.getElementById('btn-clear');
+
+    let cacheMap = {}; // name -> content
+    let currentFileName = null;
+    let isEditing = false;
+
+    // Pick Folder Button Logic
+    btnPick.addEventListener('click', async () => {
+      if ('showDirectoryPicker' in window) {
+        try {
+          const dirHandle = await window.showDirectoryPicker();
+          await scanAndStoreDirectoryHandle(dirHandle);
+          return;
+        } catch (e) {
+          if (e.name !== 'AbortError') console.warn('Directory API failed, falling back to input', e);
+        }
+      }
+      folderInput.click();
+    });
+
+    // Fallback Directory Input Handler
+    folderInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files).filter(f => f.name.endsWith('.md'));
+      if (files.length === 0) return;
+
+      for (const file of files) {
+        const text = await file.text();
+        await saveFileToDB(file.name, text);
+      }
+      await loadStoredFiles();
+    });
+
+    // Modern Directory Handle Reader
+    async function scanAndStoreDirectoryHandle(dirHandle) {
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+          const file = await entry.getFile();
+          const text = await file.text();
+          await saveFileToDB(entry.name, text);
+        }
+      }
+      await loadStoredFiles();
+    }
+
+    // Load and Display Files from Persistent Storage
+    async function loadStoredFiles() {
+      const stored = await getAllFilesFromDB();
+      cacheMap = {};
+
+      if (stored.length > 0) {
+        stored.forEach(item => {
+          cacheMap[item.name] = item.content;
+        });
+        renderFileList(Object.keys(cacheMap));
+      } else {
+        await autoDiscoverServerFiles();
+      }
+    }
+
+    // Auto-discover files if running on a local web server (http/https)
+    async function autoDiscoverServerFiles() {
+      if (location.protocol === 'file:') {
+        fileListEl.innerHTML = '<li class="file-item" style="pointer-events:none;">No files in local storage.<br><br>Click "Open Folder" to pick markdown files.</li>';
+        return;
+      }
+
+      try {
+        const response = await fetch('./');
+        const htmlText = await response.text();
+        const regex = /href="([^"?#]+\.md)"/gi;
+        let match;
+        const mdFiles = new Set();
+
+        while ((match = regex.exec(htmlText)) !== null) {
+          mdFiles.add(decodeURIComponent(match[1]));
+        }
+
+        if (mdFiles.size > 0) {
+          for (const filename of mdFiles) {
+            const res = await fetch(filename);
+            const text = await res.text();
+            await saveFileToDB(filename, text);
+          }
+          await loadStoredFiles();
+        } else {
+          fileListEl.innerHTML = '<li class="file-item" style="pointer-events:none;">No .md files found in local storage or server root.</li>';
+        }
+      } catch (e) {
+        fileListEl.innerHTML = '<li class="file-item" style="pointer-events:none;">Click "Open Folder" to load and save files locally.</li>';
+      }
+    }
+
+    // Render file list with inline Edit/Save button on active item
+    function renderFileList(filenames) {
+      fileListEl.innerHTML = '';
+      const lastActive = localStorage.getItem('last_active_file');
+      let targetToSelect = null;
+
+      filenames.sort().forEach((name) => {
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        li.dataset.filename = name;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'file-name';
+        nameSpan.textContent = name;
+
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'btn-item-action';
+        actionBtn.textContent = '✏️ Edit';
+
+        actionBtn.onclick = async (e) => {
+          e.stopPropagation(); // Stop click from triggering parent li.onclick
+          if (!isEditing) {
+            enterEditMode();
+          } else {
+            await saveAndExitEditMode();
+          }
+        };
+
+        li.onclick = async () => {
+          if (currentFileName === name) return;
+
+          // Auto-save current active file before switching away
+          if (isEditing) {
+            await saveAndExitEditMode();
+          }
+
+          selectFile(name);
+        };
+
+        li.appendChild(nameSpan);
+        li.appendChild(actionBtn);
+
+        if (name === lastActive) targetToSelect = name;
+        fileListEl.appendChild(li);
+      });
+
+      if (targetToSelect && cacheMap[targetToSelect]) {
+        selectFile(targetToSelect);
+      } else if (filenames.length > 0) {
+        selectFile(filenames[0]);
+      }
+    }
+
+    function selectFile(filename) {
+      currentFileName = filename;
+      localStorage.setItem('last_active_file', filename);
+
+      document.querySelectorAll('.file-item').forEach(el => {
+        if (el.dataset.filename === filename) {
+          el.classList.add('active');
+        } else {
+          el.classList.remove('active', 'editing');
+        }
+      });
+
+      renderMarkdown(cacheMap[filename] || '');
+    }
+
+    // Mode Switchers
+    function enterEditMode() {
+      if (!currentFileName) return;
+      isEditing = true;
+
+      textareaEl.value = cacheMap[currentFileName] || '';
+      contentEl.style.display = 'none';
+      textareaEl.style.display = 'block';
+
+      const activeLi = document.querySelector(`.file-item[data-filename="${CSS.escape(currentFileName)}"]`);
+      if (activeLi) {
+        activeLi.classList.add('editing');
+        const btn = activeLi.querySelector('.btn-item-action');
+        if (btn) {
+          btn.textContent = '💾 Save';
+          btn.classList.add('save-mode');
+        }
+      }
+      textareaEl.focus();
+    }
+
+    async function saveAndExitEditMode() {
+      if (isEditing && currentFileName) {
+        const updatedText = textareaEl.value;
+        cacheMap[currentFileName] = updatedText;
+        await saveFileToDB(currentFileName, updatedText);
+      }
+
+      isEditing = false;
+      textareaEl.style.display = 'none';
+      contentEl.style.display = 'block';
+
+      // Reset all file item button states
+      document.querySelectorAll('.file-item').forEach(el => {
+        el.classList.remove('editing');
+        const btn = el.querySelector('.btn-item-action');
+        if (btn) {
+          btn.textContent = '✏️ Edit';
+          btn.classList.remove('save-mode');
+        }
+      });
+
+      if (currentFileName) {
+        renderMarkdown(cacheMap[currentFileName] || '');
+      }
+    }
+
+    // Render Markdown Content
+    function renderMarkdown(markdownText) {
+      contentEl.innerHTML = marked.parse(markdownText || '');
+      hljs.highlightAll();
+    }
+
+    // Clear Storage Action
+    btnClear.addEventListener('click', async () => {
+      if (confirm('Clear all locally saved Markdown files and cached states?')) {
+        await clearDB();
+        localStorage.removeItem('last_active_file');
+        cacheMap = {};
+        currentFileName = null;
+        if (isEditing) await saveAndExitEditMode();
+        fileListEl.innerHTML = '<li class="file-item" style="pointer-events:none;">Storage cleared.<br><br>Click "Open Folder" to load files.</li>';
+        contentEl.innerHTML = '<div class="placeholder">Select a Markdown file from the sidebar to view.</div>';
+      }
+    });
+
+    // --- Theme Manager ---
+    const themePanel = document.getElementById('theme-panel');
+    const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const btnThemeReset = document.getElementById('btn-theme-reset');
+
+    const themeVariables = [
+      { id: 'bg-primary', cssVar: '--bg-primary', default: '#0d1117' },
+      { id: 'bg-secondary', cssVar: '--bg-secondary', default: '#161b22' },
+      { id: 'border-color', cssVar: '--border-color', default: '#30363d' },
+      { id: 'text-main', cssVar: '--text-main', default: '#c9d1d9' },
+      { id: 'text-muted', cssVar: '--text-muted', default: '#8b949e' },
+      { id: 'accent', cssVar: '--accent', default: '#58a6ff' },
+      { id: 'sidebar-width', cssVar: '--sidebar-width', default: '300', suffix: 'px' }
+    ];
+
+    btnThemeToggle.addEventListener('click', () => {
+      themePanel.style.display = themePanel.style.display === 'flex' ? 'none' : 'flex';
+    });
+
+    function applyTheme() {
+      themeVariables.forEach(item => {
+        const savedVal = localStorage.getItem('theme_' + item.id) || item.default;
+        document.documentElement.style.setProperty(item.cssVar, savedVal + (item.suffix || ''));
+        const input = document.getElementById('input-' + item.id);
+        if (input) input.value = savedVal;
+      });
+    }
+
+    themeVariables.forEach(item => {
+      const input = document.getElementById('input-' + item.id);
+      if (input) {
+        input.addEventListener('input', (e) => {
+          const val = e.target.value;
+          document.documentElement.style.setProperty(item.cssVar, val + (item.suffix || ''));
+          localStorage.setItem('theme_' + item.id, val);
+        });
+      }
+    });
+
+    btnThemeReset.addEventListener('click', () => {
+      themeVariables.forEach(item => {
+        localStorage.removeItem('theme_' + item.id);
+      });
+      applyTheme();
+    });
+
+    // Initialize theme on load
+    applyTheme();
+
+    // Initialize on load
+    loadStoredFiles();
+  </script>
+</body>
+</html>
